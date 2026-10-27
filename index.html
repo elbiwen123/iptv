@@ -102,8 +102,8 @@
                     <input type="text" id="server-url" value="http://line.tivi-ott.net" required>
                 </div>
                 <div class="form-group" style="display:none;">
-                    <label>Proxy (Ya no se usa)</label>
-                    <input type="text" id="proxy-url" value="https://corsproxy.io/?">
+                    <label>Proxy Interno Vercel</label>
+                    <input type="text" id="proxy-url" value="/api/proxy">
                 </div>
                 <div class="form-group">
                     <label>Usuario</label>
@@ -160,7 +160,7 @@
         let categoriesData = { live: [], vod: [], series: [] };
         let hls = null;
 
-        const proxyBase = "https://corsproxy.io/?";
+        const proxyBase = "/api/proxy";
 
         const loader = document.getElementById('loader');
         const loaderText = document.getElementById('loader-text');
@@ -187,7 +187,7 @@
 
             try {
                 const apiLogin = `${authData.server}/player_api.php?username=${authData.user}&password=${authData.pass}`;
-                const fetchUrl = proxyBase + encodeURIComponent(apiLogin);
+                const fetchUrl = `${proxyBase}?url=` + encodeURIComponent(apiLogin);
                 
                 const res = await fetch(fetchUrl);
                 
@@ -205,7 +205,7 @@
 
                 if (data.user_info && data.user_info.auth === 1) {
                     if (isTest) {
-                        alert("¡Conexión exitosa!");
+                        alert("¡Conexión exitosa a través del proxy de Vercel!");
                     } else {
                         document.getElementById('login-screen').style.display = 'none';
                         document.getElementById('app-screen').style.display = 'grid';
@@ -252,7 +252,7 @@
                 };
 
                 for (let type of ['live', 'vod', 'series']) {
-                    const res = await fetch(proxyBase + encodeURIComponent(endpoints[type]));
+                    const res = await fetch(`${proxyBase}?url=` + encodeURIComponent(endpoints[type]));
                     categoriesData[type] = await res.json();
                 }
                 renderCategories();
@@ -290,7 +290,7 @@
             const endpoint = `${authData.server}/player_api.php?username=${authData.user}&password=${authData.pass}&action=${action}&category_id=${catId}`;
 
             try {
-                const res = await fetch(proxyBase + encodeURIComponent(endpoint));
+                const res = await fetch(`${proxyBase}?url=` + encodeURIComponent(endpoint));
                 const items = await res.json();
                 renderItems(items);
             } catch (err) {
@@ -337,8 +337,8 @@
             if (Hls.isSupported()) {
                 hls = new Hls({
                     xhrSetup: function (xhr, url) {
-                        // Forzar que todos los fragmentos del video pasen por el proxy CORS público
-                        const proxiedUrl = proxyBase + encodeURIComponent(url);
+                        // Enrutar cada fragmento de video a través del proxy propio de Vercel
+                        const proxiedUrl = `${proxyBase}?url=` + encodeURIComponent(url);
                         xhr.open('GET', proxiedUrl, true);
                     }
                 });
@@ -348,7 +348,7 @@
                     video.play().catch(e => console.log("Play pendiente", e));
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = proxyBase + encodeURIComponent(rawStreamUrl);
+                video.src = `${proxyBase}?url=` + encodeURIComponent(rawStreamUrl);
                 video.addEventListener('loadedmetadata', () => video.play());
             }
         }
