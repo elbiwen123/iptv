@@ -22,19 +22,25 @@ export default async function handler(req, res) {
       return res.status(200).end();
     }
 
-    // Copiar los headers del contenido (tipo de video, m3u8, etc.)
     const contentType = response.headers.get("content-type");
     if (contentType) {
       res.setHeader("Content-Type", contentType);
     }
 
     res.status(response.status);
-    
-    // Transmitir el stream de datos
-    const buffer = await response.arrayBuffer();
-    return res.send(Buffer.from(buffer));
+
+    // Leer el stream y enviarlo correctamente en Node.js
+    const reader = response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(value);
+    }
+    res.end();
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
   }
 }
