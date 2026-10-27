@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web IPTV Xtream Biwen Player</title>
+    <title>Biwen IPTV</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         :root {
@@ -87,7 +87,7 @@
     <!-- LOGIN SCREEN -->
     <div id="login-screen">
         <div class="login-card">
-            <h2>Xtream Biwen Web Player</h2>
+            <h2>Biwen IPTV</h2>
             <form id="login-form">
                 <div class="form-group">
                     <label>URL del Servidor IPTV</label>
@@ -114,7 +114,7 @@
     <!-- MAIN APP -->
     <div id="app-screen">
         <header>
-            <h1 id="app-title">Web IPTV Player</h1>
+            <h1 id="app-title">Biwen IPTV</h1>
             <button class="logout-btn" id="logout-btn">Cerrar Sesión</button>
         </header>
 
@@ -151,7 +151,6 @@
         const loader = document.getElementById('loader');
         const loaderText = document.getElementById('loader-text');
 
-        // Cargar credenciales guardadas si existen
         window.addEventListener('DOMContentLoaded', () => {
             if (localStorage.getItem('iptv_server')) document.getElementById('server-url').value = localStorage.getItem('iptv_server');
             if (localStorage.getItem('iptv_proxy')) document.getElementById('proxy-url').value = localStorage.getItem('iptv_proxy');
@@ -161,4 +160,11 @@
 
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            authData.server = document.getElementById('server-url
+            authData.server = document.getElementById('server-url').value.replace(/\/$/, '');
+            authData.proxy = document.getElementById('proxy-url').value.replace(/\/$/, '');
+            authData.user = document.getElementById('username').value;
+            authData.pass = document.getElementById('password').value;
+
+            localStorage.setItem('iptv_server', authData.server);
+            localStorage.setItem('iptv_proxy', authData.proxy);
+
