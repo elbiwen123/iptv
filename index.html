@@ -329,9 +329,7 @@
                 rawStreamUrl = `${authData.server}/series/${authData.user}/${authData.pass}/${item.series_id}.mp4`;
             }
 
-            const streamUrl = `${authData.proxy}/?url=${encodeURIComponent(rawStreamUrl)}`;
-            console.log("Reproduciendo URL proxificada:", streamUrl);
-
+            // Usar la URL directa para que hls.js intercepte cada fragmento mediante xhrSetup
             if (hls) {
                 hls.destroy();
             }
@@ -339,35 +337,42 @@
             if (Hls.isSupported()) {
                 hls = new Hls({
                     xhrSetup: function (xhr, url) {
-                        // Asegurar que las peticiones internas de fragmentos también usen el proxy si es necesario
+                        // Forzar de forma inteligente que cualquier sub-petición o fragmento pase por el proxy
+                        if (!url.startsWith(authData.proxy)) {
+                            const proxiedUrl = `${authData.proxy}/?url=${encodeURIComponent(url)}`;
+                            xhr.open('GET', proxiedUrl, true);
+                        } else {
+                            xhr.open('GET', url, true);
+                        }
                     }
                 });
-                hls.loadSource(streamUrl);
+
+                hls.loadSource(rawStreamUrl);
                 hls.attachMedia(video);
+                
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play().catch(e => console.log("Autoplay bloqueado o pendiente:", e));
+                    video.play().catch(e => console.log("Play bloqueado por navegador:", e));
                 });
+
                 hls.on(Hls.Events.ERROR, function (event, data) {
-                    console.warn("HLS Error detectado:", data.type, data.details);
                     if (data.fatal) {
                         switch (data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.error("Error de red en HLS, intentando recuperar...");
+                                console.warn("Recuperando de error de red HLS...");
                                 hls.startLoad();
                                 break;
                             case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.error("Error de medios en HLS, intentando recuperar...");
+                                console.warn("Recuperando de error de medios HLS...");
                                 hls.recoverMediaError();
                                 break;
                             default:
-                                console.error("Error fatal irreparable en HLS");
                                 hls.destroy();
                                 break;
                         }
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = streamUrl;
+                video.src = `${authData.proxy}/?url=${encodeURIComponent(rawStreamUrl)}`;
                 video.addEventListener('loadedmetadata', () => video.play());
             }
         }
