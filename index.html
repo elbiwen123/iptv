@@ -101,9 +101,9 @@
                     <label>URL del Servidor IPTV</label>
                     <input type="text" id="server-url" value="http://line.tivi-ott.net" required>
                 </div>
-                <div class="form-group">
-                    <label>Cloudflare Proxy URL</label>
-                    <input type="text" id="proxy-url" value="https://player.elbiwen123.workers.dev" required>
+                <div class="form-group" style="display:none;">
+                    <label>Proxy (Ya no se usa)</label>
+                    <input type="text" id="proxy-url" value="https://corsproxy.io/?">
                 </div>
                 <div class="form-group">
                     <label>Usuario</label>
@@ -160,6 +160,8 @@
         let categoriesData = { live: [], vod: [], series: [] };
         let hls = null;
 
+        const proxyBase = "https://corsproxy.io/?";
+
         const loader = document.getElementById('loader');
         const loaderText = document.getElementById('loader-text');
         const errorBox = document.getElementById('error-box');
@@ -177,21 +179,20 @@
         async function performLogin(isTest = false) {
             hideError();
             authData.server = document.getElementById('server-url').value.replace(/\/$/, '');
-            authData.proxy = document.getElementById('proxy-url').value.replace(/\/$/, '');
             authData.user = document.getElementById('username').value.trim();
             authData.pass = document.getElementById('password').value.trim();
 
-            loaderText.innerText = isTest ? "Probando conexión con el Proxy..." : "Iniciando sesión...";
+            loaderText.innerText = isTest ? "Probando conexión..." : "Iniciando sesión...";
             loader.style.display = 'flex';
 
             try {
                 const apiLogin = `${authData.server}/player_api.php?username=${authData.user}&password=${authData.pass}`;
-                const fetchUrl = `${authData.proxy}/?url=${encodeURIComponent(apiLogin)}`;
+                const fetchUrl = proxyBase + encodeURIComponent(apiLogin);
                 
                 const res = await fetch(fetchUrl);
                 
                 if (!res.ok) {
-                    throw new Error(`El Proxy respondió con código HTTP ${res.status} (${res.statusText})`);
+                    throw new Error(`Error HTTP ${res.status}`);
                 }
 
                 const textData = await res.text();
@@ -199,23 +200,23 @@
                 try {
                     data = JSON.parse(textData);
                 } catch (e) {
-                    throw new Error("El servidor no devolvió un JSON válido. Respuesta: " + textData.substring(0, 100));
+                    throw new Error("Respuesta inválida del servidor.");
                 }
 
                 if (data.user_info && data.user_info.auth === 1) {
                     if (isTest) {
-                        alert("¡Conexión exitosa! Las credenciales y el proxy responden perfectamente.");
+                        alert("¡Conexión exitosa!");
                     } else {
                         document.getElementById('login-screen').style.display = 'none';
                         document.getElementById('app-screen').style.display = 'grid';
                         loadCategories();
                     }
                 } else {
-                    showError("El servidor rechazó las credenciales o el usuario está inactivo.");
+                    showError("Credenciales incorrectas o usuario inactivo.");
                 }
             } catch (err) {
-                showError("Error detallado: " + err.message);
-                if (isTest) alert("Falló la prueba. Revisa el cuadro rojo de error.");
+                showError("Error: " + err.message);
+                if (isTest) alert("Falló la prueba.");
             } finally {
                 loader.style.display = 'none';
             }
@@ -251,7 +252,7 @@
                 };
 
                 for (let type of ['live', 'vod', 'series']) {
-                    const res = await fetch(`${authData.proxy}/?url=${encodeURIComponent(endpoints[type])}`);
+                    const res = await fetch(proxyBase + encodeURIComponent(endpoints[type]));
                     categoriesData[type] = await res.json();
                 }
                 renderCategories();
@@ -289,7 +290,7 @@
             const endpoint = `${authData.server}/player_api.php?username=${authData.user}&password=${authData.pass}&action=${action}&category_id=${catId}`;
 
             try {
-                const res = await fetch(`${authData.proxy}/?url=${encodeURIComponent(endpoint)}`);
+                const res = await fetch(proxyBase + encodeURIComponent(endpoint));
                 const items = await res.json();
                 renderItems(items);
             } catch (err) {
@@ -329,7 +330,6 @@
                 rawStreamUrl = `${authData.server}/series/${authData.user}/${authData.pass}/${item.series_id}.mp4`;
             }
 
-            // Usar la URL directa para que hls.js intercepte cada fragmento mediante xhrSetup
             if (hls) {
                 hls.destroy();
             }
@@ -337,42 +337,18 @@
             if (Hls.isSupported()) {
                 hls = new Hls({
                     xhrSetup: function (xhr, url) {
-                        // Forzar de forma inteligente que cualquier sub-petición o fragmento pase por el proxy
-                        if (!url.startsWith(authData.proxy)) {
-                            const proxiedUrl = `${authData.proxy}/?url=${encodeURIComponent(url)}`;
-                            xhr.open('GET', proxiedUrl, true);
-                        } else {
-                            xhr.open('GET', url, true);
-                        }
+                        // Forzar que todos los fragmentos del video pasen por el proxy CORS público
+                        const proxiedUrl = proxyBase + encodeURIComponent(url);
+                        xhr.open('GET', proxiedUrl, true);
                     }
                 });
-
                 hls.loadSource(rawStreamUrl);
                 hls.attachMedia(video);
-                
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play().catch(e => console.log("Play bloqueado por navegador:", e));
-                });
-
-                hls.on(Hls.Events.ERROR, function (event, data) {
-                    if (data.fatal) {
-                        switch (data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.warn("Recuperando de error de red HLS...");
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.warn("Recuperando de error de medios HLS...");
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                hls.destroy();
-                                break;
-                        }
-                    }
+                    video.play().catch(e => console.log("Play pendiente", e));
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = `${authData.proxy}/?url=${encodeURIComponent(rawStreamUrl)}`;
+                video.src = proxyBase + encodeURIComponent(rawStreamUrl);
                 video.addEventListener('loadedmetadata', () => video.play());
             }
         }
