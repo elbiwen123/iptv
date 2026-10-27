@@ -13,12 +13,44 @@
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --border: #334155;
+            --error-bg: #450a0a;
+            --error-border: #991b1b;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
         body { background-color: var(--bg-color); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* LOGIN SCREEN */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color); display: flex; justify-content: center; align-items: center; z-index: 1000; overflow-y: auto; padding: 20px;
+        }
+        .login-card {
+            background: var(--panel-bg); padding: 30px; border-radius: 16px; width: 100%; max-width: 480px;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5); border: 1px solid var(--border);
+        }
+        .login-card h2 { margin-bottom: 20px; font-size: 22px; color: var(--text-main); text-align: center; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+        .form-group input {
+            width: 100%; padding: 10px; background: var(--bg-color); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text-main); font-size: 15px; outline: none; transition: border-color 0.2s;
+        }
+        .form-group input:focus { border-color: var(--accent); }
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        .btn {
+            flex: 1; padding: 11px; background: var(--accent); color: white; border: none;
+            border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+        }
+        .btn-secondary { background: #334155; }
+        .btn:hover { opacity: 0.9; }
+        
+        #error-box {
+            display: none; margin-top: 15px; padding: 12px; background: var(--error-bg);
+            border: 1px solid var(--error-border); border-radius: 8px; color: #fecaca; font-size: 13px; word-break: break-all;
+        }
 
         /* MAIN APP LAYOUT */
-        #app-screen { display: grid; height: 100vh; grid-template-columns: 320px 1fr; grid-template-rows: 60px 1fr; }
+        #app-screen { display: none; height: 100vh; grid-template-columns: 320px 1fr; grid-template-rows: 60px 1fr; }
         header {
             grid-column: 1 / -1; background: var(--panel-bg); border-bottom: 1px solid var(--border);
             display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
@@ -48,7 +80,7 @@
         .pane-header { padding: 16px; font-weight: 600; border-bottom: 1px solid var(--border); font-size: 15px; }
 
         /* LOADER */
-        #loader { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); display: flex; justify-content: center; align-items: center; z-index: 2000; flex-direction: column; gap: 12px; }
+        #loader { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.85); display: none; justify-content: center; align-items: center; z-index: 2000; flex-direction: column; gap: 12px; }
         .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
@@ -57,14 +89,46 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <div id="loader-text" style="font-size: 14px; color: var(--text-muted);">Iniciando sesión automáticamente...</div>
+        <div id="loader-text" style="font-size: 14px; color: var(--text-muted);">Conectando...</div>
+    </div>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-card">
+            <h2>Biwen IPTV - Acceso</h2>
+            <form id="login-form">
+                <div class="form-group">
+                    <label>URL del Servidor IPTV</label>
+                    <input type="text" id="server-url" value="http://line.tivi-ott.net" required>
+                </div>
+                <div class="form-group">
+                    <label>Cloudflare Proxy URL</label>
+                    <input type="text" id="proxy-url" value="https://player.elbiwen123.workers.dev" required>
+                </div>
+                <div class="form-group">
+                    <label>Usuario</label>
+                    <input type="text" id="username" value="3N422J" required>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="password" value="BBL86W" required>
+                </div>
+                
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary" id="test-btn">Test Conexión</button>
+                    <button type="submit" class="btn">Conectar</button>
+                </div>
+                
+                <div id="error-box"></div>
+            </form>
+        </div>
     </div>
 
     <!-- MAIN APP -->
     <div id="app-screen">
         <header>
             <h1 id="app-title">Biwen IPTV</h1>
-            <button class="logout-btn" id="logout-btn" style="display:none;">Cerrar Sesión</button>
+            <button class="logout-btn" id="logout-btn">Cerrar Sesión</button>
         </header>
 
         <sidebar>
@@ -91,37 +155,80 @@
     </div>
 
     <script>
-        // Credenciales preconfiguradas
-        const authData = {
-            server: "http://line.tivi-ott.net",
-            proxy: "https://player.elbiwen123.workers.dev",
-            user: "3N422J",
-            pass: "BBL86W"
-        };
-
+        let authData = {};
         let currentType = 'live';
         let categoriesData = { live: [], vod: [], series: [] };
         let hls = null;
 
         const loader = document.getElementById('loader');
         const loaderText = document.getElementById('loader-text');
+        const errorBox = document.getElementById('error-box');
 
-        // Auto-login al cargar la página
-        window.addEventListener('DOMContentLoaded', async () => {
+        function showError(msg) {
+            errorBox.style.display = 'block';
+            errorBox.innerText = "❌ " + msg;
+        }
+
+        function hideError() {
+            errorBox.style.display = 'none';
+            errorBox.innerText = "";
+        }
+
+        async function performLogin(isTest = false) {
+            hideError();
+            authData.server = document.getElementById('server-url').value.replace(/\/$/, '');
+            authData.proxy = document.getElementById('proxy-url').value.replace(/\/$/, '');
+            authData.user = document.getElementById('username').value.trim();
+            authData.pass = document.getElementById('password').value.trim();
+
+            loaderText.innerText = isTest ? "Probando conexión con el Proxy..." : "Iniciando sesión...";
+            loader.style.display = 'flex';
+
             try {
                 const apiLogin = `${authData.server}/player_api.php?username=${authData.user}&password=${authData.pass}`;
-                const res = await fetch(`${authData.proxy}/?url=${encodeURIComponent(apiLogin)}`);
-                const data = await res.json();
+                const fetchUrl = `${authData.proxy}/?url=${encodeURIComponent(apiLogin)}`;
+                
+                const res = await fetch(fetchUrl);
+                
+                if (!res.ok) {
+                    throw new Error(`El Proxy respondió con código HTTP ${res.status} (${res.statusText})`);
+                }
+
+                const textData = await res.text();
+                let data;
+                try {
+                    data = JSON.parse(textData);
+                } catch (e) {
+                    throw new Error("El servidor no devolvió un JSON válido. Respuesta: " + textData.substring(0, 100));
+                }
 
                 if (data.user_info && data.user_info.auth === 1) {
-                    loader.style.display = 'none';
-                    loadCategories();
+                    if (isTest) {
+                        alert("¡Conexión exitosa! Las credenciales y el proxy responden perfectamente.");
+                    } else {
+                        document.getElementById('login-screen').style.display = 'none';
+                        document.getElementById('app-screen').style.display = 'grid';
+                        loadCategories();
+                    }
                 } else {
-                    alert('Error: Credenciales inválidas o servidor no responde.');
+                    showError("El servidor rechazó las credenciales o el usuario está inactivo.");
                 }
             } catch (err) {
-                alert('Error de red al conectar con el proxy: ' + err.message);
+                showError("Error detallado: " + err.message);
+                if (isTest) alert("Falló la prueba. Revisa el cuadro rojo de error.");
+            } finally {
+                loader.style.display = 'none';
             }
+        }
+
+        document.getElementById('test-btn').addEventListener('click', () => performLogin(true));
+        document.getElementById('login-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            performLogin(false);
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            location.reload();
         });
 
         document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -185,4 +292,59 @@
                 const res = await fetch(`${authData.proxy}/?url=${encodeURIComponent(endpoint)}`);
                 const items = await res.json();
                 renderItems(items);
-            } catch
+            } catch (err) {
+                console.error(err);
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        function renderItems(items) {
+            const container = document.getElementById('items-list');
+            container.innerHTML = '';
+            if (!Array.isArray(items)) return;
+
+            items.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'list-item';
+                div.innerText = item.name || item.title;
+                div.onclick = () => {
+                    document.querySelectorAll('#items-list .list-item').forEach(el => el.classList.remove('active'));
+                    div.classList.add('active');
+                    playItem(item);
+                };
+                container.appendChild(div);
+            });
+        }
+
+        function playItem(item) {
+            const video = document.getElementById('video-player');
+            let rawStreamUrl = '';
+
+            if (currentType === 'live') {
+                rawStreamUrl = `${authData.server}/live/${authData.user}/${authData.pass}/${item.stream_id}.m3u8`;
+            } else if (currentType === 'vod') {
+                rawStreamUrl = `${authData.server}/movie/${authData.user}/${authData.pass}/${item.stream_id}.${item.container_extension || 'mp4'}`;
+            } else if (currentType === 'series') {
+                rawStreamUrl = `${authData.server}/series/${authData.user}/${authData.pass}/${item.series_id}.mp4`;
+            }
+
+            const streamUrl = `${authData.proxy}/?url=${encodeURIComponent(rawStreamUrl)}`;
+
+            if (hls) {
+                hls.destroy();
+            }
+
+            if (Hls.isSupported()) {
+                hls = new Hls();
+                hls.loadSource(streamUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = streamUrl;
+                video.addEventListener('loadedmetadata', () => video.play());
+            }
+        }
+    </script>
+</body>
+</html>
