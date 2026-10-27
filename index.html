@@ -330,16 +330,42 @@
             }
 
             const streamUrl = `${authData.proxy}/?url=${encodeURIComponent(rawStreamUrl)}`;
+            console.log("Reproduciendo URL proxificada:", streamUrl);
 
             if (hls) {
                 hls.destroy();
             }
 
             if (Hls.isSupported()) {
-                hls = new Hls();
+                hls = new Hls({
+                    xhrSetup: function (xhr, url) {
+                        // Asegurar que las peticiones internas de fragmentos también usen el proxy si es necesario
+                    }
+                });
                 hls.loadSource(streamUrl);
                 hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(e => console.log("Autoplay bloqueado o pendiente:", e));
+                });
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    console.warn("HLS Error detectado:", data.type, data.details);
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.error("Error de red en HLS, intentando recuperar...");
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.error("Error de medios en HLS, intentando recuperar...");
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                console.error("Error fatal irreparable en HLS");
+                                hls.destroy();
+                                break;
+                        }
+                    }
+                });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = streamUrl;
                 video.addEventListener('loadedmetadata', () => video.play());
